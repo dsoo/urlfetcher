@@ -17,10 +17,12 @@ func schemaConfig() graphql.SchemaConfig {
 		Name: "Response",
 		Fields: graphql.Fields{
 			"url": &graphql.Field{
-				Type: graphql.String,
+				Type:        graphql.String,
+				Description: "The URL that was retrieved using HTTP GET",
 			},
 			"body": &graphql.Field{
-				Type: graphql.String,
+				Type:        graphql.String,
+				Description: "The body of the HTTP response",
 			},
 		},
 	})
@@ -29,16 +31,20 @@ func schemaConfig() graphql.SchemaConfig {
 		Name: "Job",
 		Fields: graphql.Fields{
 			"id": &graphql.Field{
-				Type: graphql.Int,
+				Type:        graphql.Int,
+				Description: "Unique ID for the job",
 			},
 			"url": &graphql.Field{
-				Type: graphql.String,
+				Type:        graphql.String,
+				Description: "An URL to be retrieved via HTTP GET",
 			},
 			"status": &graphql.Field{
-				Type: graphql.String,
+				Type:        graphql.String,
+				Description: "Simple status string for the job. Can be waiting, fetching, done, done - cached",
 			},
 			"response": &graphql.Field{
-				Type: responseType,
+				Type:        responseType,
+				Description: "Response data from the URL to be retrieved. May be cached.",
 			},
 		},
 	})
@@ -46,13 +52,15 @@ func schemaConfig() graphql.SchemaConfig {
 		Name: "Query",
 		Fields: graphql.Fields{
 			"jobs": &graphql.Field{
-				Type: graphql.NewList(jobType),
+				Type:        graphql.NewList(jobType),
+				Description: "Retrieve information about all jobs on the server",
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					return urldata.GetJobs(), nil
 				},
 			},
 			"job": &graphql.Field{
-				Type: jobType,
+				Type:        jobType,
+				Description: "Retrieve parameters of a job, given the ID of the job",
 				Args: graphql.FieldConfigArgument{
 					"id": &graphql.ArgumentConfig{
 						Description: "id of the job",
@@ -68,7 +76,8 @@ func schemaConfig() graphql.SchemaConfig {
 				},
 			},
 			"response": &graphql.Field{
-				Type: responseType,
+				Type:        responseType,
+				Description: "Retrieve response data for a particular URL.",
 				Args: graphql.FieldConfigArgument{
 					"url": &graphql.ArgumentConfig{
 						Description: "url that we requested",
@@ -87,7 +96,8 @@ func schemaConfig() graphql.SchemaConfig {
 		Name: "Mutation",
 		Fields: graphql.Fields{
 			"addJob": &graphql.Field{
-				Type: jobType,
+				Type:        jobType,
+				Description: "Add a new urlfetch job to the queue.",
 				Args: graphql.FieldConfigArgument{
 					"url": &graphql.ArgumentConfig{
 						Type: graphql.NewNonNull(graphql.String),

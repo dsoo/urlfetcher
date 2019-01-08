@@ -3,7 +3,6 @@ package urldata
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -83,12 +82,15 @@ func doJob(jobID int64) {
 		job.Status = "fetching"
 		resp, err := http.Get(job.URL)
 		if err != nil {
-			log.Fatal(err)
+			job.Response = nil
+			job.Status = "error - error with GET"
+			return
 		}
 		defer resp.Body.Close()
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			log.Fatal(err)
+			job.Response = nil
+			job.Status = "error - error reading body"
 		}
 		response := &Response{
 			URL:       job.URL,
