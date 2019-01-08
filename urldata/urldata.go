@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"sync/atomic"
 	"time"
+
+	"github.com/graphql-go/graphql"
 )
 
 // Response represents data retrieved from an URL.
@@ -21,6 +24,119 @@ type Job struct {
 	URL      string
 	Status   string    // Enum of status - waiting, success, error
 	Response *Response // The result data for the job
+}
+
+// SchemaConfig configures the graphql schema and callbacks
+func SchemaConfig() graphql.SchemaConfig {
+	responseType := graphql.NewObject(graphql.ObjectConfig{
+		Name: "Response",
+		Fields: graphql.Fields{
+			"url": &graphql.Field{
+				Type:        graphql.String,
+				Description: "The URL that was retrieved using HTTP GET",
+			},
+			"body": &graphql.Field{
+				Type:        graphql.String,
+				Description: "The body of the HTTP response",
+			},
+		},
+	})
+
+	jobType := graphql.NewObject(graphql.ObjectConfig{
+		Name: "Job",
+		Fields: graphql.Fields{
+			"id": &graphql.Field{
+				Type:        graphql.Int,
+				Description: "Unique ID for the job",
+			},
+			"url": &graphql.Field{
+				Type:        graphql.String,
+				Description: "An URL to be retrieved via HTTP GET",
+			},
+			"status": &graphql.Field{
+				Type:        graphql.String,
+				Description: "Simple status string for the job. Can be waiting, fetching, done, done - cached",
+			},
+			"response": &graphql.Field{
+				Type:        responseType,
+				Description: "Response data from the URL to be retrieved. May be cached.",
+			},
+		},
+	})
+	rootQuery := graphql.NewObject(graphql.ObjectConfig{
+		Name: "Query",
+		Fields: graphql.Fields{
+			"jobs": &graphql.Field{
+				Type:        graphql.NewList(jobType),
+				Description: "Retrieve information about all jobs on the server",
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					return GetJobs(), nil
+				},
+			},
+			"job": &graphql.Field{
+				Type:        jobType,
+				Description: "Retrieve parameters of a job, given the ID of the job",
+				Args: graphql.FieldConfigArgument{
+					"id": &graphql.ArgumentConfig{
+						Description: "id of the job",
+						Type:        graphql.NewNonNull(graphql.String),
+					},
+				},
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					id, err := strconv.Atoi(p.Args["id"].(string))
+					if err != nil {
+						return nil, err
+					}
+					return GetJob(int64(id)), nil
+				},
+			},
+			"responses": &graphql.Field{
+				Type:        graphql.NewList(responseType),
+				Description: "Retrieve information about all responses on the server",
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					return GetResponses(), nil
+				},
+			},
+			"response": &graphql.Field{
+				Type:        responseType,
+				Description: "Retrieve response data for a particular URL.",
+				Args: graphql.FieldConfigArgument{
+					"url": &graphql.ArgumentConfig{
+						Description: "url that we requested",
+						Type:        graphql.NewNonNull(graphql.String),
+					},
+				},
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					url := p.Args["url"].(string)
+					return GetResponse(url), nil
+				},
+			},
+		},
+	})
+
+	rootMutation := graphql.NewObject(graphql.ObjectConfig{
+		Name: "Mutation",
+		Fields: graphql.Fields{
+			"addJob": &graphql.Field{
+				Type:        jobType,
+				Description: "Add a new urlfetch job to the queue.",
+				Args: graphql.FieldConfigArgument{
+					"url": &graphql.ArgumentConfig{
+						Type: graphql.NewNonNull(graphql.String),
+					},
+				},
+				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
+					job := AddJob(params.Args["url"].(string))
+					return job, nil
+				},
+			},
+		},
+	})
+
+	schemaConfig := graphql.SchemaConfig{Query: rootQuery,
+		Mutation: rootMutation}
+
+	return schemaConfig
 }
 
 // "Global" state for the package representing data and jobs
@@ -63,6 +179,15 @@ func GetResponse(url string) *Response {
 	return responses[url]
 }
 
+// GetResponses returns all responses stored by this server as a slice
+func GetResponses() []*Response {
+	sliceResponses := []*Response{}
+	for _, response := range responses {
+		sliceResponses = append(sliceResponses, response)
+	}
+	return sliceResponses
+}
+
 func doJob(jobID int64) {
 	// Check if we already have data in the cache - if so, we can fill it right away
 	// and skip adding it to the work queue.
@@ -98,6 +223,7 @@ func doJob(jobID int64) {
 			Timestamp: time.Now(),
 		}
 		responses[job.URL] = response
+		job.Response = response
 		job.Status = "done"
 	}
 }
