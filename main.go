@@ -45,6 +45,12 @@ func schemaConfig() graphql.SchemaConfig {
 	rootQuery := graphql.NewObject(graphql.ObjectConfig{
 		Name: "Query",
 		Fields: graphql.Fields{
+			"jobs": &graphql.Field{
+				Type: graphql.NewList(jobType),
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					return urldata.GetJobs(), nil
+				},
+			},
 			"job": &graphql.Field{
 				Type: jobType,
 				Args: graphql.FieldConfigArgument{

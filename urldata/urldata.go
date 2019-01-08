@@ -32,7 +32,6 @@ var curJobID = int64(0)
 
 // AddJob adds a new job to the work queue
 func AddJob(url string) Job {
-	// FIXME: Make this atomic
 	jobID := atomic.AddInt64(&curJobID, 1)
 	job := Job{
 		ID:       jobID,
@@ -51,6 +50,15 @@ func GetJob(id int64) *Job {
 	return jobs[id]
 }
 
+// GetJobs returns all jobs stored by this server as a slice
+func GetJobs() []*Job {
+	sliceJobs := []*Job{}
+	for _, job := range jobs {
+		sliceJobs = append(sliceJobs, job)
+	}
+	return sliceJobs
+}
+
 // GetResponse returns the response data associated with the URL
 func GetResponse(url string) *Response {
 	return responses[url]
@@ -65,24 +73,31 @@ func doJob(jobID int64) {
 	fmt.Println("Fetching job", jobID)
 	job := jobs[jobID]
 
-	job.Status = "fetching"
-	resp, err := http.Get(job.URL)
-	if err != nil {
-		log.Fatal(err)
+	// Check the cache
+	response, ok := responses[job.URL]
+	if ok && (time.Now().Sub(response.Timestamp).Hours() < 1.0) {
+		// Immediately fill with cache and finish the job.
+		job.Response = response
+		job.Status = "done - cached"
+	} else {
+		job.Status = "fetching"
+		resp, err := http.Get(job.URL)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+		response := &Response{
+			URL:       job.URL,
+			Body:      string(body),
+			Timestamp: time.Now(),
+		}
+		responses[job.URL] = response
+		job.Status = "done"
 	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-	response := Response{
-		URL:       job.URL,
-		Body:      string(body),
-		Timestamp: time.Now(),
-	}
-	responses[job.URL] = &response
-	job.Response = &response
-	job.Status = "done"
 }
 
 func fetchWorker(jobQueue chan int64) {
